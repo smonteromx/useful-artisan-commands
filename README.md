@@ -12,6 +12,17 @@ composer require esfredderick/useful-artisan-commands --dev
 
 Auto-discovery registers the commands automatically.
 
+## Automatic PostgreSQL Verification
+
+When the package is installed, it automatically listens for `migrate*` Artisan commands. For PostgreSQL connections, it verifies that:
+
+- the configured database exists, creating it through a maintenance `postgres` connection when possible
+- the configured migrations schema exists when `database.migrations.table` uses `schema.table` notation
+
+This requires no application service provider setup while Laravel package auto-discovery is enabled. The verification also runs eagerly during unit tests so migration-backed test databases can be prepared before the test suite touches the connection.
+
+If package discovery is disabled for this package, manually register `EsFredDerick\UsefulArtisanCommands\UsefulArtisanCommandsServiceProvider` in `bootstrap/providers.php`.
+
 ## Commands
 
 ### `make:action`
