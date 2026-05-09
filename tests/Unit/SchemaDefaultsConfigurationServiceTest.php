@@ -7,24 +7,24 @@ require_once dirname(__DIR__, 2).'/src/Services/SchemaDefaultsConfigurationServi
 beforeEach(function () {
     $this->basePath = sys_get_temp_dir().'/useful-schema-defaults-'.bin2hex(random_bytes(6));
 
-    mkdir($this->basePath.'/app/Models/Client', 0777, true);
+    mkdir($this->basePath.'/app/Models', 0777, true);
     mkdir($this->basePath.'/config', 0777, true);
     mkdir($this->basePath.'/database/factories', 0777, true);
     mkdir($this->basePath.'/database/migrations', 0777, true);
     mkdir($this->basePath.'/database/seeders', 0777, true);
 
-    file_put_contents($this->basePath.'/app/Models/Client/User.php', clientUserModelContents());
+    file_put_contents($this->basePath.'/app/Models/User.php', userModelContents());
     file_put_contents($this->basePath.'/config/auth.php', authConfigContents());
     file_put_contents($this->basePath.'/config/cache.php', cacheConfigContents());
     file_put_contents($this->basePath.'/config/database.php', databaseConfigContents());
     file_put_contents($this->basePath.'/config/queue.php', queueConfigContents());
     file_put_contents($this->basePath.'/config/session.php', sessionConfigContents());
-    file_put_contents($this->basePath.'/database/factories/UserFactory.php', clientUserFactoryContents());
+    file_put_contents($this->basePath.'/database/factories/UserFactory.php', userFactoryContents());
     file_put_contents($this->basePath.'/database/migrations/0000_00_00_000000_create_initial_schemas.php', initialSchemasMigrationContents());
     file_put_contents($this->basePath.'/database/migrations/0001_01_01_000000_create_users_table.php', usersMigrationContents());
     file_put_contents($this->basePath.'/database/migrations/0001_01_01_000001_create_cache_table.php', cacheMigrationContents());
     file_put_contents($this->basePath.'/database/migrations/0001_01_01_000002_create_jobs_table.php', jobsMigrationContents());
-    file_put_contents($this->basePath.'/database/seeders/DatabaseSeeder.php', clientDatabaseSeederContents());
+    file_put_contents($this->basePath.'/database/seeders/DatabaseSeeder.php', databaseSeederContents());
 
     $this->service = new SchemaDefaultsConfigurationService;
 });
@@ -121,33 +121,53 @@ it('reads current team tables from the starter kit team migration', function () 
         ]);
 });
 
-it('syncs user model and factory with laravel 13 factory attributes', function () {
-    $result = $this->service->syncUserModel($this->basePath, 'authentication.users', 13);
+it('syncs laravel 12 model table properties without moving models', function () {
+    $result = $this->service->syncStarterKitModels($this->basePath, qualifiedTables(), 12);
 
-    expect($result['to'])
-        ->toBe('app/Models/Authentication/User.php')
-        ->and($result['removed_directories'])
-        ->toBe(['app/Models/Client'])
-        ->and(file_get_contents($this->basePath.'/app/Models/Authentication/User.php'))
-        ->toContain('#[UseFactory(UserFactory::class)]')
-        ->toContain("protected \$table = 'authentication.users';")
-        ->not->toContain('protected static string $factory')
-        ->and(file_get_contents($this->basePath.'/database/factories/UserFactory.php'))
-        ->toContain('use App\Models\Authentication\User;')
-        ->toContain('@extends Factory<User>')
-        ->toContain('#[UseModel(User::class)]');
+    expect($result)
+        ->toBe([
+            [
+                'file' => 'app/Models/User.php',
+                'table' => 'client.application_users',
+            ],
+        ])
+        ->and(file_get_contents($this->basePath.'/app/Models/User.php'))
+        ->toContain('namespace App\Models;')
+        ->toContain("protected \$table = 'client.application_users';")
+        ->not->toContain('#[Table')
+        ->and(is_dir($this->basePath.'/app/Models/Client'))
+        ->toBeFalse();
 });
 
-it('syncs user model and factory with laravel 12 factory methods', function () {
-    $this->service->syncUserModel($this->basePath, 'authentication.users', 12);
+it('syncs laravel 13 table attributes on starter kit team models', function () {
+    file_put_contents($this->basePath.'/app/Models/User.php', laravel13UserModelContents());
+    file_put_contents($this->basePath.'/app/Models/Team.php', laravel13TeamModelContents());
+    file_put_contents($this->basePath.'/app/Models/Membership.php', laravel13MembershipModelContents());
+    file_put_contents($this->basePath.'/app/Models/TeamInvitation.php', laravel13TeamInvitationModelContents());
 
-    expect(file_get_contents($this->basePath.'/app/Models/Authentication/User.php'))
-        ->toContain('protected static function newFactory(): UserFactory')
-        ->toContain('return UserFactory::new();')
-        ->not->toContain('#[UseFactory')
-        ->and(file_get_contents($this->basePath.'/database/factories/UserFactory.php'))
-        ->toContain('protected $model = User::class;')
-        ->not->toContain('#[UseModel');
+    $result = $this->service->syncStarterKitModels($this->basePath, qualifiedTablesWithTeams(), 13);
+
+    expect($result)
+        ->toBe([
+            ['file' => 'app/Models/User.php', 'table' => 'client.application_users'],
+            ['file' => 'app/Models/Team.php', 'table' => 'membership.workspaces'],
+            ['file' => 'app/Models/Membership.php', 'table' => 'membership.workspace_users'],
+            ['file' => 'app/Models/TeamInvitation.php', 'table' => 'membership.workspace_invitations'],
+        ])
+        ->and(file_get_contents($this->basePath.'/app/Models/User.php'))
+        ->toContain('use Illuminate\Database\Eloquent\Attributes\Table;')
+        ->toContain("#[Table('client.application_users')]")
+        ->not->toContain('protected $table')
+        ->and($this->service->currentUserQualifiedTable($this->basePath))
+        ->toBe('client.application_users')
+        ->and(file_get_contents($this->basePath.'/app/Models/Team.php'))
+        ->toContain("#[Table('membership.workspaces')]")
+        ->toContain("belongsToMany(User::class, 'membership.workspace_users', 'team_id', 'user_id')")
+        ->and(file_get_contents($this->basePath.'/app/Models/Membership.php'))
+        ->toContain("#[Table('membership.workspace_users')]")
+        ->not->toContain('protected $table')
+        ->and(file_get_contents($this->basePath.'/app/Models/TeamInvitation.php'))
+        ->toContain("#[Table('membership.workspace_invitations')]");
 });
 
 it('cleans managed env keys without touching env example', function () {
@@ -187,46 +207,142 @@ function qualifiedTablesWithTeams(): array
     ];
 }
 
-function clientUserModelContents(): string
+function userModelContents(): string
 {
     return <<<'PHP'
 <?php
 
-namespace App\Models\Client;
+namespace App\Models;
 
-use Database\Factories\UserFactory;
-use Illuminate\Auth\MustVerifyEmail;
-use Illuminate\Database\Eloquent\Attributes\UseFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
-#[UseFactory(UserFactory::class)]
 class User extends Authenticatable
 {
-    /** @use HasFactory<UserFactory> */
-    use HasFactory, MustVerifyEmail, Notifiable;
+    use HasFactory, Notifiable;
 
     protected $table = 'client.users';
 }
 PHP;
 }
 
-function clientUserFactoryContents(): string
+function laravel13UserModelContents(): string
+{
+    return <<<'PHP'
+<?php
+
+namespace App\Models;
+
+use App\Concerns\HasTeams;
+use Database\Factories\UserFactory;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
+use Laravel\Fortify\TwoFactorAuthenticatable;
+
+#[Fillable(['name', 'email', 'password', 'current_team_id'])]
+#[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
+class User extends Authenticatable
+{
+    /** @use HasFactory<UserFactory> */
+    use HasFactory, HasTeams, Notifiable, TwoFactorAuthenticatable;
+}
+PHP;
+}
+
+function laravel13TeamModelContents(): string
+{
+    return <<<'PHP'
+<?php
+
+namespace App\Models;
+
+use Database\Factories\TeamFactory;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+
+#[Fillable(['name', 'slug', 'is_personal'])]
+class Team extends Model
+{
+    /** @use HasFactory<TeamFactory> */
+    use HasFactory;
+
+    /**
+     * @return BelongsToMany<Model, $this>
+     */
+    public function members(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'team_members', 'team_id', 'user_id')
+            ->using(Membership::class)
+            ->withPivot(['role'])
+            ->withTimestamps();
+    }
+}
+PHP;
+}
+
+function laravel13MembershipModelContents(): string
+{
+    return <<<'PHP'
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Relations\Pivot;
+
+#[Fillable(['team_id', 'user_id', 'role'])]
+class Membership extends Pivot
+{
+    /**
+     * The table associated with the model.
+     *
+     * @var string
+     */
+    protected $table = 'team_members';
+}
+PHP;
+}
+
+function laravel13TeamInvitationModelContents(): string
+{
+    return <<<'PHP'
+<?php
+
+namespace App\Models;
+
+use Database\Factories\TeamInvitationFactory;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+#[Fillable(['team_id', 'email', 'role', 'invited_by', 'expires_at', 'accepted_at'])]
+class TeamInvitation extends Model
+{
+    /** @use HasFactory<TeamInvitationFactory> */
+    use HasFactory;
+}
+PHP;
+}
+
+function userFactoryContents(): string
 {
     return <<<'PHP'
 <?php
 
 namespace Database\Factories;
 
-use App\Models\Client\User;
-use Illuminate\Database\Eloquent\Factories\Attributes\UseModel;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
  * @extends Factory<User>
  */
-#[UseModel(User::class)]
 class UserFactory extends Factory
 {
     public function definition(): array
@@ -237,14 +353,14 @@ class UserFactory extends Factory
 PHP;
 }
 
-function clientDatabaseSeederContents(): string
+function databaseSeederContents(): string
 {
     return <<<'PHP'
 <?php
 
 namespace Database\Seeders;
 
-use App\Models\Client\User;
+use App\Models\User;
 use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
@@ -262,7 +378,7 @@ function authConfigContents(): string
     return <<<'PHP'
 <?php
 
-use App\Models\Client\User;
+use App\Models\User;
 
 return [
     'providers' => [

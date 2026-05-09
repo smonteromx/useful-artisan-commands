@@ -342,8 +342,8 @@ class SchemaDefaultsConfigurationService
         $modelPath = $this->currentUserModelPath($basePath);
         $contents = $modelPath === null ? '' : (file_get_contents($modelPath) ?: '');
 
-        if (preg_match('/protected\s+\$table\s*=\s*\'([^\']+)\';/', $contents, $matches)) {
-            return $matches[1];
+        if ($table = $this->configuredModelTable($contents)) {
+            return $table;
         }
 
         return $this->defaultQualifiedTable('users');
@@ -392,49 +392,51 @@ class SchemaDefaultsConfigurationService
     }
 
     /**
-     * @return array{from: string|null, to: string, namespace: string, removed_directories: array<int, string>}
+     * @param  array<string, string>  $qualifiedTables
+     * @return array<int, array{file: string, table: string}>
      */
-    public function syncUserModel(string $basePath, string $qualifiedTable, ?int $laravelMajorVersion = null): array
+    public function syncStarterKitModels(string $basePath, array $qualifiedTables, ?int $laravelMajorVersion = null): array
     {
-        $modelPath = $this->currentUserModelPath($basePath) ?? $basePath.'/app/Models/Client/User.php';
-        $originalModelPath = is_file($modelPath) ? $modelPath : null;
-        $schema = $this->schemaNameFromQualifiedTable($qualifiedTable, $this->userTableSetting()['default_schema']);
-        $namespaceSegment = Str::studly($schema);
-        $namespace = "App\\Models\\{$namespaceSegment}";
-        $newPath = "{$basePath}/app/Models/{$namespaceSegment}/User.php";
-        $contents = is_file($modelPath) ? (file_get_contents($modelPath) ?: '') : $this->defaultUserModelContents();
+        $updatedModels = [];
 
-        $contents = preg_replace('/^namespace\s+App\\\\Models\\\\[^;]+;/m', "namespace {$namespace};", $contents) ?? $contents;
-        $contents = preg_replace('/protected\s+\$table\s*=\s*\'[^\']+\';/', "protected \$table = '{$qualifiedTable}';", $contents) ?? $contents;
-        $contents = $this->syncUserModelFactoryLinking($contents, $laravelMajorVersion);
-
-        if (! is_dir(dirname($newPath))) {
-            mkdir(dirname($newPath), 0777, true);
-        }
-
-        file_put_contents($newPath, $contents);
-
-        $removedDirectories = [];
-
-        if ($modelPath !== $newPath && is_file($modelPath)) {
-            unlink($modelPath);
-
-            $directory = dirname($modelPath);
-
-            if ($this->isEmptyDirectory($directory)) {
-                rmdir($directory);
-                $removedDirectories[] = str_replace($basePath.'/', '', $directory);
+        foreach ($this->starterKitModelTableSettings() as $key => $setting) {
+            if (! array_key_exists($key, $qualifiedTables)) {
+                continue;
             }
+
+            $path = $key === 'users'
+                ? ($this->currentUserModelPath($basePath) ?? "{$basePath}/app/Models/{$setting['file']}")
+                : "{$basePath}/app/Models/{$setting['file']}";
+
+            if (! is_file($path) && $key !== 'users') {
+                continue;
+            }
+
+            $contents = is_file($path) ? (file_get_contents($path) ?: '') : $this->defaultUserModelContents();
+            $contents = $this->syncModelTableDeclaration(
+                contents: $contents,
+                className: $setting['class'],
+                qualifiedTable: $qualifiedTables[$key],
+                laravelMajorVersion: $laravelMajorVersion,
+            );
+
+            if ($key === 'teams' && array_key_exists('team_members', $qualifiedTables)) {
+                $contents = $this->syncTeamModelPivotTableReferences($contents, $qualifiedTables['team_members']);
+            }
+
+            if (! is_dir(dirname($path))) {
+                mkdir(dirname($path), 0777, true);
+            }
+
+            file_put_contents($path, $contents);
+
+            $updatedModels[] = [
+                'file' => str_replace($basePath.'/', '', $path),
+                'table' => $qualifiedTables[$key],
+            ];
         }
 
-        $this->replaceClassReferences($basePath, $namespace.'\\User', $laravelMajorVersion);
-
-        return [
-            'from' => $originalModelPath === null ? null : str_replace($basePath.'/', '', $originalModelPath),
-            'to' => str_replace($basePath.'/', '', $newPath),
-            'namespace' => $namespace,
-            'removed_directories' => $removedDirectories,
-        ];
+        return $updatedModels;
     }
 
     /**
@@ -678,6 +680,12 @@ class SchemaDefaultsConfigurationService
 
     private function currentUserModelPath(string $basePath): ?string
     {
+        $path = $basePath.'/app/Models/User.php';
+
+        if (is_file($path)) {
+            return $path;
+        }
+
         $matches = glob($basePath.'/app/Models/*/User.php') ?: [];
 
         sort($matches);
@@ -685,25 +693,45 @@ class SchemaDefaultsConfigurationService
         return $matches[0] ?? null;
     }
 
+    /**
+     * @return array<string, array{file: string, class: string}>
+     */
+    private function starterKitModelTableSettings(): array
+    {
+        return [
+            'users' => [
+                'file' => 'User.php',
+                'class' => 'User',
+            ],
+            'teams' => [
+                'file' => 'Team.php',
+                'class' => 'Team',
+            ],
+            'team_members' => [
+                'file' => 'Membership.php',
+                'class' => 'Membership',
+            ],
+            'team_invitations' => [
+                'file' => 'TeamInvitation.php',
+                'class' => 'TeamInvitation',
+            ],
+        ];
+    }
+
     private function defaultUserModelContents(): string
     {
         return <<<'PHP'
 <?php
 
-namespace App\Models\Client;
+namespace App\Models;
 
-use Database\Factories\UserFactory;
-use Illuminate\Auth\MustVerifyEmail;
-use Illuminate\Database\Eloquent\Attributes\UseFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
-#[UseFactory(UserFactory::class)]
 class User extends Authenticatable
 {
-    /** @use HasFactory<UserFactory> */
-    use HasFactory, MustVerifyEmail, Notifiable;
+    use HasFactory, Notifiable;
 
     protected $table = 'client.users';
 
@@ -729,68 +757,50 @@ class User extends Authenticatable
 PHP;
     }
 
-    private function syncUserModelFactoryLinking(string $contents, ?int $laravelMajorVersion): string
+    private function syncModelTableDeclaration(string $contents, string $className, string $qualifiedTable, ?int $laravelMajorVersion): string
     {
-        $contents = preg_replace('/^\s*protected static string \$factory = UserFactory::class;\n\n?/m', '', $contents) ?? $contents;
+        if ($this->usesModelAttributes($laravelMajorVersion)) {
+            $contents = $this->removeTableProperty($contents);
+            $contents = $this->ensureUseStatement($contents, 'Illuminate\Database\Eloquent\Attributes\Table');
 
-        if ($this->usesFactoryAttributes($laravelMajorVersion)) {
-            $contents = $this->removeNewFactoryMethod($contents);
-            $contents = $this->ensureUseStatement($contents, 'Illuminate\Database\Eloquent\Attributes\UseFactory');
-
-            return $this->ensureClassAttribute($contents, 'User', 'UseFactory(UserFactory::class)');
+            return $this->ensureClassAttribute($contents, $className, "Table('{$qualifiedTable}')");
         }
 
-        $contents = $this->removeClassAttribute($contents, 'UseFactory');
-        $contents = $this->removeUseStatement($contents, 'Illuminate\Database\Eloquent\Attributes\UseFactory');
+        $contents = $this->removeClassAttribute($contents, 'Table');
+        $contents = $this->removeUseStatement($contents, 'Illuminate\Database\Eloquent\Attributes\Table');
 
-        return $this->ensureNewFactoryMethod($contents);
+        return $this->ensureTableProperty($contents, $qualifiedTable);
     }
 
-    private function replaceClassReferences(string $basePath, string $userClass, ?int $laravelMajorVersion): void
+    private function configuredModelTable(string $contents): ?string
     {
-        foreach ([
-            $basePath.'/config/auth.php',
-            $basePath.'/database/seeders/DatabaseSeeder.php',
-            $basePath.'/database/factories/UserFactory.php',
-        ] as $path) {
-            if (! is_file($path)) {
-                continue;
-            }
-
-            $contents = file_get_contents($path) ?: '';
-            $contents = preg_replace_callback('/App\\\\Models\\\\[^\\\\]+\\\\User/', static fn (): string => $userClass, $contents) ?? $contents;
-
-            if (str_ends_with($path, 'UserFactory.php')) {
-                $contents = $this->syncUserFactoryReferences($contents, $userClass, $laravelMajorVersion);
-            }
-
-            file_put_contents($path, $contents);
+        if (preg_match('/protected\s+\$table\s*=\s*\'([^\']+)\';/', $contents, $matches)) {
+            return $matches[1];
         }
+
+        if (preg_match('/#\[Table\(\s*(?:name:\s*)?\'([^\']+)\'/', $contents, $matches)) {
+            return $matches[1];
+        }
+
+        return null;
     }
 
-    private function syncUserFactoryReferences(string $contents, string $userClass, ?int $laravelMajorVersion): string
+    private function syncTeamModelPivotTableReferences(string $contents, string $qualifiedTable): string
     {
-        $contents = $this->ensureUseStatement($contents, $userClass);
-        $contents = preg_replace(
-            '/@extends\s+\\\\Illuminate\\\\Database\\\\Eloquent\\\\Factories\\\\Factory<[^>]+>/',
-            '@extends Factory<User>',
+        return preg_replace_callback(
+            '/(belongsToMany\(\s*[^,]+,\s*)\'([^\']+)\'/',
+            function (array $matches) use ($qualifiedTable): string {
+                if ($this->managedKeyForMigrationTable($matches[2]) !== 'team_members') {
+                    return $matches[0];
+                }
+
+                return "{$matches[1]}'{$qualifiedTable}'";
+            },
             $contents,
         ) ?? $contents;
-        $contents = $this->removeFactoryModelProperty($contents);
-
-        if ($this->usesFactoryAttributes($laravelMajorVersion)) {
-            $contents = $this->ensureUseStatement($contents, 'Illuminate\Database\Eloquent\Factories\Attributes\UseModel');
-
-            return $this->ensureClassAttribute($contents, 'UserFactory', 'UseModel(User::class)');
-        }
-
-        $contents = $this->removeClassAttribute($contents, 'UseModel');
-        $contents = $this->removeUseStatement($contents, 'Illuminate\Database\Eloquent\Factories\Attributes\UseModel');
-
-        return $this->ensureFactoryModelProperty($contents);
     }
 
-    private function usesFactoryAttributes(?int $laravelMajorVersion): bool
+    private function usesModelAttributes(?int $laravelMajorVersion): bool
     {
         return ($laravelMajorVersion ?? $this->currentLaravelMajorVersion()) >= 13;
     }
@@ -804,60 +814,28 @@ PHP;
         return 12;
     }
 
-    private function ensureNewFactoryMethod(string $contents): string
+    private function ensureTableProperty(string $contents, string $qualifiedTable): string
     {
-        $contents = $this->removeNewFactoryMethod($contents);
-        $method = <<<'PHP'
+        if (preg_match('/protected\s+\$table\s*=\s*\'[^\']+\';/', $contents)) {
+            return preg_replace('/protected\s+\$table\s*=\s*\'[^\']+\';/', "protected \$table = '{$qualifiedTable}';", $contents, 1) ?? $contents;
+        }
+
+        $property = <<<PHP
 
     /**
-     * Create a new factory instance for the model.
-     */
-    protected static function newFactory(): UserFactory
-    {
-        return UserFactory::new();
-    }
-
-PHP;
-
-        return preg_replace(
-            '/(\s+\/\*\* @use HasFactory<UserFactory> \*\/\n\s+use HasFactory, MustVerifyEmail, Notifiable;\n)/',
-            '$1'.$method,
-            $contents,
-        ) ?? $contents;
-    }
-
-    private function removeNewFactoryMethod(string $contents): string
-    {
-        return preg_replace(
-            '/\n\s*(?:\/\*\*.*?\*\/\s*)?protected static function newFactory\(\)(?:: [^{]+)?\s*\{\s*return [^;]+::new\(\);\s*\}\n/s',
-            "\n",
-            $contents,
-        ) ?? $contents;
-    }
-
-    private function ensureFactoryModelProperty(string $contents): string
-    {
-        $property = <<<'PHP'
-
-    /**
-     * The name of the factory's corresponding model.
+     * The table associated with the model.
      *
-     * @var class-string<\Illuminate\Database\Eloquent\Model>
+     * @var string
      */
-    protected $model = User::class;
+    protected \$table = '{$qualifiedTable}';
 
 PHP;
 
-        return preg_replace('/(class UserFactory extends Factory\s*\{)/', '$1'.$property, $contents, 1) ?? $contents;
-    }
+        if (preg_match('/\n\s+protected \$fillable\s*=/', $contents)) {
+            return preg_replace('/(\n\s+protected \$fillable\s*=)/', $property.'$1', $contents, 1) ?? $contents;
+        }
 
-    private function removeFactoryModelProperty(string $contents): string
-    {
-        return preg_replace(
-            '/\n\s*(?:\/\*\*.*?\*\/\s*)?protected \$model = [^;]+;\n/s',
-            "\n",
-            $contents,
-        ) ?? $contents;
+        return preg_replace('/(class \w+(?:\s+extends\s+[^{]+)?\s*\{\n)/', '$1'.$property, $contents, 1) ?? $contents;
     }
 
     private function ensureUseStatement(string $contents, string $class): string
@@ -890,29 +868,30 @@ PHP;
     {
         $attributePattern = preg_quote(Str::before($attribute, '('), '/');
 
-        if (preg_match("/^#\\[{$attributePattern}\\([^\\]]+\\)\\]\nclass {$className}/m", $contents)) {
+        if (preg_match("/^#\\[{$attributePattern}(?:\\([^\\]]*\\))?\\]$/m", $contents)) {
             return preg_replace(
-                "/^#\\[{$attributePattern}\\([^\\]]+\\)\\]\nclass {$className}/m",
-                "#[{$attribute}]\nclass {$className}",
+                "/^#\\[{$attributePattern}(?:\\([^\\]]*\\))?\\]$/m",
+                "#[{$attribute}]",
                 $contents,
+                1,
             ) ?? $contents;
         }
 
-        return preg_replace("/^class {$className}/m", "#[{$attribute}]\nclass {$className}", $contents) ?? $contents;
+        return preg_replace("/^class {$className}\\b/m", "#[{$attribute}]\nclass {$className}", $contents, 1) ?? $contents;
     }
 
     private function removeClassAttribute(string $contents, string $attribute): string
     {
-        return preg_replace('/^#\['.preg_quote($attribute, '/').'\([^\]]+\)\]\n/m', '', $contents) ?? $contents;
+        return preg_replace('/^#\['.preg_quote($attribute, '/').'(?:\([^\]]+\))?\]\n/m', '', $contents) ?? $contents;
     }
 
-    private function isEmptyDirectory(string $directory): bool
+    private function removeTableProperty(string $contents): string
     {
-        if (! is_dir($directory)) {
-            return false;
-        }
-
-        return count(array_diff(scandir($directory) ?: [], ['.', '..'])) === 0;
+        return preg_replace(
+            '/\n\s*(?:\/\*\*.*?\*\/\s*)?protected \$table = [^;]+;\n/s',
+            "\n",
+            $contents,
+        ) ?? $contents;
     }
 
     private function ensureConfigEnvCompatibility(string $basePath): void

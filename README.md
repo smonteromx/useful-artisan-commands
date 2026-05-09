@@ -82,12 +82,12 @@ Prefer running it when starting a new project, before migration history matters.
 |---|---|
 | `-c`, `--clean-env` | After choosing config-file writes, remove managed schema table keys from local `.env*` files |
 
-The User model and factory are linked according to the host Laravel version:
+Starter-kit models stay in `app/Models`; only their table declarations are synced. The declaration style follows the host Laravel version:
 
-| Laravel | Model / factory link |
+| Laravel | Model table declaration |
 |---|---|
-| 13+ | `#[UseFactory(...)]` and `#[UseModel(...)]` attributes |
-| 12 | `protected static function newFactory()` and typed factory `$model` property |
+| 13+ | `#[Table('schema.table')]` attribute |
+| 12 | `protected $table = 'schema.table';` property |
 
 ## Customizing Stubs
 

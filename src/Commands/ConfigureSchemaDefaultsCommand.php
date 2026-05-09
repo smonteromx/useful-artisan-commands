@@ -70,8 +70,6 @@ class ConfigureSchemaDefaultsCommand extends Command
             hint: 'Yes makes users share the same schema as sessions and password reset tokens.',
         ) === 'yes';
 
-        $envFile = $target === 'Env file' ? $this->selectEnvFile() : '.env';
-        $currentTables = $this->currentQualifiedTables($envFile, $target, $hasTeamMigrations);
         $teamsInUsersSchema = true;
 
         if ($hasTeamMigrations) {
@@ -81,10 +79,13 @@ class ConfigureSchemaDefaultsCommand extends Command
                     'users' => 'Same schema as users',
                     'separate' => 'Separate team schema',
                 ],
-                default: $this->defaultTeamSchemaPlacement($currentTables),
+                default: $this->defaultTeamSchemaPlacement(),
                 hint: 'Same follows the final users schema, including when users share the authentication schema.',
             ) === 'users';
         }
+
+        $envFile = $target === 'Env file' ? $this->selectEnvFile() : '.env';
+        $currentTables = $this->currentQualifiedTables($envFile, $target, $hasTeamMigrations);
 
         $schemaNames = [];
 
@@ -203,10 +204,19 @@ class ConfigureSchemaDefaultsCommand extends Command
         }
 
         $migrationSync = $this->schemaDefaults->syncDefaultMigrations($this->basePath(), $qualifiedTables);
-        $userModelSync = $this->schemaDefaults->syncUserModel($this->basePath(), $qualifiedTables['users'], $this->laravelMajorVersion());
+        $modelSync = $this->schemaDefaults->syncStarterKitModels($this->basePath(), $qualifiedTables, $this->laravelMajorVersion());
 
         info('Initial schemas migration will create: '.implode(', ', $migrationSync['schemas']).'.');
-        info("User model synced to {$userModelSync['to']}.");
+
+        if ($modelSync !== []) {
+            table(
+                headers: ['Model', 'Configured table'],
+                rows: array_map(
+                    static fn (array $model): array => [$model['file'], $model['table']],
+                    $modelSync,
+                ),
+            );
+        }
 
         if ($migrationSync['updated_tables'] !== []) {
             table(
@@ -319,17 +329,14 @@ class ConfigureSchemaDefaultsCommand extends Command
         return $this->schemaDefaults->schemaGroups()[$group]['default'];
     }
 
-    /**
-     * @param  array<string, string>  $currentTables
-     */
-    private function defaultTeamSchemaPlacement(array $currentTables): string
+    private function defaultTeamSchemaPlacement(): string
     {
         $userSchema = $this->schemaDefaults->schemaNameFromQualifiedTable(
-            qualifiedTable: $currentTables['users'],
+            qualifiedTable: $this->schemaDefaults->currentUserQualifiedTable($this->basePath()),
             default: $this->schemaDefaults->userTableSetting()['default_schema'],
         );
         $teamSchema = $this->schemaDefaults->schemaNameFromQualifiedTable(
-            qualifiedTable: $currentTables['teams'],
+            qualifiedTable: $this->schemaDefaults->currentTeamQualifiedTables($this->basePath())['teams'],
             default: $userSchema,
         );
 
