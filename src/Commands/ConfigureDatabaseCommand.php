@@ -1,8 +1,8 @@
 <?php
 
-namespace EsFredDerick\UsefulArtisanCommands\Commands;
+namespace SMonteroMx\UsefulArtisanCommands\Commands;
 
-use EsFredDerick\UsefulArtisanCommands\Concerns\InteractsWithEnvFile;
+use SMonteroMx\UsefulArtisanCommands\Concerns\InteractsWithEnvFile;
 use Illuminate\Console\Command;
 use Symfony\Component\Console\Attribute\AsCommand;
 

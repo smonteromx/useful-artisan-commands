@@ -1,12 +1,12 @@
 {
-    "name": "esfredderick/useful-artisan-commands",
+    "name": "smonteromx/useful-artisan-commands",
     "description": "A collection of useful Laravel Artisan commands for generating actions, DTOs, and more.",
     "keywords": ["laravel", "artisan", "commands", "actions", "dto"],
     "license": "MIT",
     "authors": [
         {
             "name": "Sebastián Montero",
-            "email": "esfredderick@gmail.com"
+            "email": "smonteromx@gmail.com"
         }
     ],
     "require": {
@@ -21,7 +21,7 @@
     },
     "autoload": {
         "psr-4": {
-            "EsFredDerick\\UsefulArtisanCommands\\": "src/"
+            "SMonteroMx\\UsefulArtisanCommands\\": "src/"
         }
     },
     "scripts": {
@@ -30,7 +30,7 @@
     "extra": {
         "laravel": {
             "providers": [
-                "EsFredDerick\\UsefulArtisanCommands\\UsefulArtisanCommandsServiceProvider"
+                "SMonteroMx\\UsefulArtisanCommands\\UsefulArtisanCommandsServiceProvider"
             ]
         }
     },

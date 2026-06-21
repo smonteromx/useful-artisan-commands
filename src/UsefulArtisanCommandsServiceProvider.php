@@ -1,11 +1,11 @@
 <?php
 
-namespace EsFredDerick\UsefulArtisanCommands;
+namespace SMonteroMx\UsefulArtisanCommands;
 
-use EsFredDerick\UsefulArtisanCommands\Commands\ConfigureDatabaseCommand;
-use EsFredDerick\UsefulArtisanCommands\Commands\MakeActionCommand;
-use EsFredDerick\UsefulArtisanCommands\Commands\MakeDataCommand;
-use EsFredDerick\UsefulArtisanCommands\Services\PgsqlVerificationService;
+use SMonteroMx\UsefulArtisanCommands\Commands\ConfigureDatabaseCommand;
+use SMonteroMx\UsefulArtisanCommands\Commands\MakeActionCommand;
+use SMonteroMx\UsefulArtisanCommands\Commands\MakeDataCommand;
+use SMonteroMx\UsefulArtisanCommands\Services\PgsqlVerificationService;
 use Illuminate\Support\ServiceProvider;
 
 class UsefulArtisanCommandsServiceProvider extends ServiceProvider

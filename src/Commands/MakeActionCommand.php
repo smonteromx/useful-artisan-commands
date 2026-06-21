@@ -1,6 +1,6 @@
 <?php
 
-namespace EsFredDerick\UsefulArtisanCommands\Commands;
+namespace SMonteroMx\UsefulArtisanCommands\Commands;
 
 use Illuminate\Console\GeneratorCommand;
 use Illuminate\Support\Str;

@@ -1,6 +1,6 @@
 <?php
 
-use EsFredDerick\UsefulArtisanCommands\Services\PgsqlVerificationService;
+use SMonteroMx\UsefulArtisanCommands\Services\PgsqlVerificationService;
 
 require_once dirname(__DIR__, 2).'/src/Services/PgsqlVerificationService.php';
 

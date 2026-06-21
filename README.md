@@ -7,7 +7,7 @@ Requires **PHP 8.2+** and **Laravel 12 or 13**.
 ## Installation
 
 ```bash
-composer require esfredderick/useful-artisan-commands --dev
+composer require smonteromx/useful-artisan-commands --dev
 ```
 
 Auto-discovery registers the commands automatically.
@@ -21,7 +21,7 @@ When the package is installed, it automatically listens for `migrate*` Artisan c
 
 This requires no application service provider setup while Laravel package auto-discovery is enabled. The verification also runs eagerly during unit tests so migration-backed test databases can be prepared before the test suite touches the connection.
 
-If package discovery is disabled for this package, manually register `EsFredDerick\UsefulArtisanCommands\UsefulArtisanCommandsServiceProvider` in `bootstrap/providers.php`.
+If package discovery is disabled for this package, manually register `SMonteroMx\UsefulArtisanCommands\UsefulArtisanCommandsServiceProvider` in `bootstrap/providers.php`.
 
 ## Commands
 

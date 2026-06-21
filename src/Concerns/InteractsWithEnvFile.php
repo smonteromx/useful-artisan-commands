@@ -1,6 +1,6 @@
 <?php
 
-namespace EsFredDerick\UsefulArtisanCommands\Concerns;
+namespace SMonteroMx\UsefulArtisanCommands\Concerns;
 
 trait InteractsWithEnvFile
 {

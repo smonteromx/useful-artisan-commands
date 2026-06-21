@@ -1,6 +1,6 @@
 <?php
 
-namespace EsFredDerick\UsefulArtisanCommands\Services;
+namespace SMonteroMx\UsefulArtisanCommands\Services;
 
 use Illuminate\Console\Events\CommandStarting;
 use Illuminate\Support\Facades\DB;
