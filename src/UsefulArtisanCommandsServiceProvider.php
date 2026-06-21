@@ -3,7 +3,6 @@
 namespace EsFredDerick\UsefulArtisanCommands;
 
 use EsFredDerick\UsefulArtisanCommands\Commands\ConfigureDatabaseCommand;
-use EsFredDerick\UsefulArtisanCommands\Commands\ConfigureSchemaDefaultsCommand;
 use EsFredDerick\UsefulArtisanCommands\Commands\MakeActionCommand;
 use EsFredDerick\UsefulArtisanCommands\Commands\MakeDataCommand;
 use EsFredDerick\UsefulArtisanCommands\Services\PgsqlVerificationService;
@@ -21,7 +20,6 @@ class UsefulArtisanCommandsServiceProvider extends ServiceProvider
         if ($this->app->runningInConsole()) {
             $this->commands([
                 ConfigureDatabaseCommand::class,
-                ConfigureSchemaDefaultsCommand::class,
                 MakeActionCommand::class,
                 MakeDataCommand::class,
             ]);

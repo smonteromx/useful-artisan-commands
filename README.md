@@ -63,31 +63,7 @@ Interactive prompt to configure PostgreSQL connection details in your `.env` fil
 php artisan app:config-db
 ```
 
-Prompts for host, port, database name, username, and password. Before saving, it shows a review table and lets you correct selected fields. Use `schemas:config-defaults` to configure schema-qualified Laravel framework tables such as the migrations table.
-
-### `schemas:config-defaults`
-
-Interactive prompt to configure PostgreSQL schema-qualified Laravel framework tables.
-
-```bash
-php artisan schemas:config-defaults
-```
-
-It can write values directly to config files or to a selected `.env*` file, ignoring `.env.example`.
-It also syncs starter migrations for schemas, users, password reset tokens, sessions, cache, cache locks, jobs, job batches, failed jobs, and optional starter-kit two-factor/team tables.
-
-Prefer running it when starting a new project, before migration history matters.
-
-| Option | Description |
-|---|---|
-| `-c`, `--clean-env` | After choosing config-file writes, remove managed schema table keys from local `.env*` files |
-
-Starter-kit models stay in `app/Models`; only their table declarations are synced. The declaration style follows the host Laravel version:
-
-| Laravel | Model table declaration |
-|---|---|
-| 13+ | `#[Table('schema.table')]` attribute |
-| 12 | `protected $table = 'schema.table';` property |
+Prompts for host, port, database name, username, and password. Before saving, it shows a review table and lets you correct selected fields.
 
 ## Customizing Stubs
 
